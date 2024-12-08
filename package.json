@@ -1,0 +1,35 @@
+{
+  "name": "soil-monitoring-be",
+  "version": "1.0.0",
+  "description": "A Backend side of Soil-IoT for monitoring purpose",
+  "main": "app.js",
+  "scripts": {
+    "dev": "nodemon app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wannn-one/soil-monitoring-be.git"
+  },
+  "keywords": [
+    "IoT",
+    "Soil",
+    "Monitoring"
+  ],
+  "author": "Ikhwanul Abiyu Dhiyya'ul Haq",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/wannn-one/soil-monitoring-be/issues"
+  },
+  "homepage": "https://github.com/wannn-one/soil-monitoring-be#readme",
+  "dependencies": {
+    "@influxdata/influxdb-client": "^1.35.0",
+    "@influxdata/influxdb-client-apis": "^1.35.0",
+    "cors": "^2.8.5",
+    "csv-writer": "^1.6.0",
+    "dayjs": "^1.11.13",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "nodemon": "^3.1.7"
+  }
+}
