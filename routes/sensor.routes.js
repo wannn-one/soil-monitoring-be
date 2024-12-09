@@ -1,11 +1,13 @@
 const express = require('express');
-const { saveSensorData, getSensorDataByDateRange, downloadAllSensorDataAsCSV } = require('../controllers/sensor.controllers');
+const { saveSensorData, getSensorDataByDateRangeAndField, getSensorDataByDateRange, downloadAllSensorDataAsCSV } = require('../controllers/sensor.controllers');
 
 const router = express.Router();
 
 router.route('/')
   .post(saveSensorData)
-  .get(getSensorDataByDateRange);
+  .get(getSensorDataByDateRangeAndField);
+
+router.get('/all', getSensorDataByDateRange);
 
 router.get('/csv', downloadAllSensorDataAsCSV);
 

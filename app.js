@@ -18,17 +18,13 @@ app.use(cors(
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-const baseUrl = '/api';
-
-// app.use(`${baseUrl}/device`, require('./routes/device.route'));
-// app.use(`${baseUrl}/pumpcontrol`, require('./routes/pump.route'));
-// app.use(`${baseUrl}/waterlevel`, require('./routes/sensor.route'));
+const baseUrl = '/';
 
 app.get(baseUrl, (req, res) => {
   res.json({ message: 'Welcome to Soil IoT Monitoring API' })
 });
 
-app.use(`${baseUrl}/sensor`, sensorRoutes);
+app.use(`${baseUrl}sensor`, sensorRoutes);
 
 app.listen(process.env.SERVER_PORT, () => {
   console.log(`Server running on port ${process.env.SERVER_PORT}`);
