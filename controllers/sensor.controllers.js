@@ -22,25 +22,6 @@ client.on('connect', () => {
 */
 
 const mqtttopic = 'soilmonitor/sensor';
-
-// State untuk menyimpan data terakhir
-let lastData = {
-  nitrogen: null,
-  phosphorus: null,
-  potassium: null,
-  ph: null,
-};
-
-// Fungsi untuk memeriksa apakah data baru berbeda
-function isDataDifferent(newData, oldData) {
-  return (
-    Math.abs(newData.nitrogen - oldData.nitrogen) > 1 ||
-    Math.abs(newData.phosphorus - oldData.phosphorus) > 1 ||
-    Math.abs(newData.potassium - oldData.potassium) > 1 ||
-    Math.abs(newData.ph - oldData.ph) > 1
-  );
-}
-
 client.subscribe(mqtttopic, (err) => {
   if (err) {
     console.error('Error subscribing to MQTT topic:', err);
@@ -57,22 +38,9 @@ client.on('message', async (topic, message) => {
 
       // Validate required fields
       if (!nitrogen || !phosphorus || !potassium || !ph) {
-        console.error('Invalid data received. Missing required fields.');
+        console.error('Invalid data received. One of the fields is 0:', { nitrogen, phosphorus, potassium, ph });
         return;
       }
-
-      const newData = { nitrogen, phosphorus, potassium, ph };
-      console.log('New data received:', newData);
-      console.log('Last data:', lastData);
-
-      // Periksa apakah data baru berbeda dari data sebelumnya
-      if (lastData.nitrogen !== null && !isDataDifferent(newData, lastData)) {
-        console.log('No significant change in data. Skipping save.');
-        return;
-      }
-
-      // Update last data dengan data baru
-      lastData = { ...newData };
 
       // Prepare and write data to InfluxDB
       const writeApi = influxDB.getWriteApi(org, bucket, 's');
@@ -80,12 +48,17 @@ client.on('message', async (topic, message) => {
         .floatField('nitrogen', nitrogen)
         .floatField('phosphorus', phosphorus)
         .floatField('potassium', potassium)
-        .floatField('ph', ph);
+        .floatField('ph', ph)
 
       writeApi.writePoint(point);
       await writeApi.close();
 
-      console.log('Data saved to InfluxDB successfully:', newData);
+      console.log('Data saved to InfluxDB successfully:', {
+        nitrogen,
+        phosphorus,
+        potassium,
+        ph,
+      });
     } catch (error) {
       console.error('Error processing MQTT message:', error);
     }
