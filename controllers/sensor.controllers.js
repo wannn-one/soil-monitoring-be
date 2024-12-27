@@ -2,36 +2,96 @@ const { influxDB, org, bucket } = require('../config/db');
 const { Point } = require('@influxdata/influxdb-client');
 const { createObjectCsvStringifier } = require('csv-writer');
 const dayjs = require('dayjs');
+const mqtt = require('mqtt');
+require('dotenv').config();
+
+const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL;
+const MQTT_BROKER_PORT = process.env.MQTT_BROKER_PORT;
+
+const client = mqtt.connect(`mqtt://${MQTT_BROKER_URL}:${MQTT_BROKER_PORT}`);
+
+client.on('connect', () => {
+  console.log('Connected to MQTT Broker for Sensor at mqtt://' + MQTT_BROKER_URL + ':' + MQTT_BROKER_PORT);
+});
 
 /*
-    POST /api/sensor
-    Upload sensor data to InfluxDB
+    Subscribe to the MQTT topic to receive sensor data
+    and save it to InfluxDB
+    topic: soilmonitor/sensor
+    payload: { nitrogen, phosphorus, potassium, ph }
 */
-exports.saveSensorData = async (req, res) => {
-  const { nitrogen, phosphorus, potassium, ph } = req.body;
 
-  if (!nitrogen || !phosphorus || !potassium || !ph) {
-    return res.status(400).json({ error: 'All fields are required.' });
-  }
+const mqtttopic = 'soilmonitor/sensor';
 
-  try {
-    const writeApi = influxDB.getWriteApi(org, bucket, 's');
-
-    const point = new Point('soil_data')
-      .floatField('nitrogen', nitrogen)
-      .floatField('phosphorus', phosphorus)
-      .floatField('potassium', potassium)
-      .floatField('ph', ph);
-
-    writeApi.writePoint(point);
-    await writeApi.close();
-
-    res.status(200).json({ message: 'Data saved successfully.' });
-  } catch (error) {
-    console.error('Error while saving data:', error);
-    res.status(500).json({ error: 'Error while saving data.' });
-  }
+// State untuk menyimpan data terakhir
+let lastData = {
+  nitrogen: null,
+  phosphorus: null,
+  potassium: null,
+  ph: null,
 };
+
+// Fungsi untuk memeriksa apakah data baru berbeda
+function isDataDifferent(newData, oldData) {
+  return (
+    Math.abs(newData.nitrogen - oldData.nitrogen) > 1 ||
+    Math.abs(newData.phosphorus - oldData.phosphorus) > 1 ||
+    Math.abs(newData.potassium - oldData.potassium) > 1 ||
+    Math.abs(newData.ph - oldData.ph) > 1
+  );
+}
+
+client.subscribe(mqtttopic, (err) => {
+  if (err) {
+    console.error('Error subscribing to MQTT topic:', err);
+  } else {
+    console.log(`Subscribed to MQTT topic: ${mqtttopic}`);
+  }
+});
+
+client.on('message', async (topic, message) => {
+  if (topic === mqtttopic) {
+    try {
+      // Parse the message payload
+      const { nitrogen, phosphorus, potassium, ph } = JSON.parse(message.toString());
+
+      // Validate required fields
+      if (!nitrogen || !phosphorus || !potassium || !ph) {
+        console.error('Invalid data received. Missing required fields.');
+        return;
+      }
+
+      const newData = { nitrogen, phosphorus, potassium, ph };
+      console.log('New data received:', newData);
+      console.log('Last data:', lastData);
+
+      // Periksa apakah data baru berbeda dari data sebelumnya
+      if (lastData.nitrogen !== null && !isDataDifferent(newData, lastData)) {
+        console.log('No significant change in data. Skipping save.');
+        return;
+      }
+
+      // Update last data dengan data baru
+      lastData = { ...newData };
+
+      // Prepare and write data to InfluxDB
+      const writeApi = influxDB.getWriteApi(org, bucket, 's');
+      const point = new Point('soil_data')
+        .floatField('nitrogen', nitrogen)
+        .floatField('phosphorus', phosphorus)
+        .floatField('potassium', potassium)
+        .floatField('ph', ph);
+
+      writeApi.writePoint(point);
+      await writeApi.close();
+
+      console.log('Data saved to InfluxDB successfully:', newData);
+    } catch (error) {
+      console.error('Error processing MQTT message:', error);
+    }
+  }
+});
+
 
 /*
     GET /api/sensor?start=<start_date>&end=<end_date>
