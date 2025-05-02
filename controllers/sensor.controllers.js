@@ -3,68 +3,80 @@ const { Point } = require('@influxdata/influxdb-client');
 const { createObjectCsvStringifier } = require('csv-writer');
 const dayjs = require('dayjs');
 const mqtt = require('mqtt');
+const { mergeDataByTimestamp } = require('../helpers/csv');
 require('dotenv').config();
 
-const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL;
-const MQTT_BROKER_PORT = process.env.MQTT_BROKER_PORT;
+const MQTT_BROKER = process.env.MQTT_BROKER;
+const MQTT_PORT = process.env.MQTT_PORT;
 
-const client = mqtt.connect(`mqtt://${MQTT_BROKER_URL}:${MQTT_BROKER_PORT}`);
+// Konfigurasi MQTT dengan non-TLS/publik (1883)
+const client = mqtt.connect(`mqtt://${MQTT_BROKER}:${MQTT_PORT}`);
 
+// Konfigurasi MQTT dengan TLS (8883)
+// const mqttUrl = `mqtts://${MQTT_BROKER}:${MQTT_PORT}`;
+
+// console.log("Connecting to:", mqttUrl);
+
+// const client = mqtt.connect(mqttUrl, {
+//   username: process.env.MQTT_USER,
+//   password: process.env.MQTT_PASSWORD,
+//   protocol: 'mqtts',
+//   rejectUnauthorized: false,
+// });
+
+// Subscribe MQTT topic
 client.on('connect', () => {
-  console.log('Connected to MQTT Broker for Sensor at mqtt://' + MQTT_BROKER_URL + ':' + MQTT_BROKER_PORT);
-});
-
-/*
-    Subscribe to the MQTT topic to receive sensor data
-    and save it to InfluxDB
-    topic: soilmonitor/sensor
-    payload: { nitrogen, phosphorus, potassium, ph }
-*/
-
-const mqtttopic = 'soilmonitor/sensor';
-client.subscribe(mqtttopic, (err) => {
-  if (err) {
-    console.error('Error subscribing to MQTT topic:', err);
-  } else {
-    console.log(`Subscribed to MQTT topic: ${mqtttopic}`);
-  }
+  console.log('Connected to MQTT broker');
+  client.subscribe(process.env.MQTT_TOPIC, (err) => {
+    if (err) {
+      console.error('Error subscribing to MQTT topic:', err);
+    } else {
+      console.log('Subscribed to topic:', process.env.MQTT_TOPIC);
+    }
+  });
 });
 
 client.on('message', async (topic, message) => {
-  if (topic === mqtttopic) {
+  if (topic === process.env.MQTT_TOPIC) {
     try {
-      // Parse the message payload
-      const { nitrogen, phosphorus, potassium, ph } = JSON.parse(message.toString());
+      const payload = message.toString();
+      console.log('Data diterima:', payload);
 
-      // Validate required fields
-      if (!nitrogen || !phosphorus || !potassium || !ph) {
-        console.error('Invalid data received. One of the fields is 0:', { nitrogen, phosphorus, potassium, ph });
+      const [nitrogen, phosphorus, potassium, ph] = payload.split(";").map(parseFloat);
+
+      console.log('Data yang diterima setelah parsing:', {
+        nitrogen, phosphorus, potassium, ph
+      });
+
+      // Validasi nilai
+      if (
+        isNaN(nitrogen) || isNaN(phosphorus) ||
+        isNaN(potassium) || isNaN(ph)
+      ) {
+        console.error('Format data tidak valid!', { nitrogen, phosphorus, potassium, ph });
         return;
       }
 
-      // Prepare and write data to InfluxDB
+      // Kirim ke InfluxDB
       const writeApi = influxDB.getWriteApi(org, bucket, 's');
       const point = new Point('soil_data')
         .floatField('nitrogen', nitrogen)
         .floatField('phosphorus', phosphorus)
         .floatField('potassium', potassium)
-        .floatField('ph', ph)
+        .floatField('ph', ph);
 
       writeApi.writePoint(point);
       await writeApi.close();
 
-      console.log('Data saved to InfluxDB successfully:', {
-        nitrogen,
-        phosphorus,
-        potassium,
-        ph,
+      console.log('Data berhasil disimpan ke InfluxDB:', {
+        nitrogen, phosphorus, potassium, ph
       });
+
     } catch (error) {
       console.error('Error processing MQTT message:', error);
     }
   }
 });
-
 
 /*
     GET /api/sensor?start=<start_date>&end=<end_date>
@@ -150,7 +162,7 @@ exports.getSensorDataByDateRangeAndField = async (req, res) => {
         res.status(500).json({ error: 'Error while retrieving data.' });
       },
       complete() {
-        res.status(200).json( {message: 'Data retrieved successfully.', data: results} );
+        res.status(200).json({ message: 'Data retrieved successfully.', data: results });
       },
     });
   } catch (error) {
@@ -226,29 +238,3 @@ exports.downloadAllSensorDataAsCSV = async (req, res) => {
     res.status(500).json({ error: 'Error while retrieving data for CSV.' });
   }
 };
-
-// Helper function untuk menggabungkan data berdasarkan timestamp
-function mergeDataByTimestamp(rawData) {
-  const merged = {};
-
-  // Gabungkan data berdasarkan timestamp
-  rawData.forEach((item) => {
-    const timestamp = item._time;
-    if (!merged[timestamp]) {
-      merged[timestamp] = {
-        timestamp,
-        nitrogen: null,
-        ph: null,
-        potassium: null,
-        phosphorus: null,
-      };
-    }
-    merged[timestamp][item._field] = item._value;
-  });
-
-  // Konversi ke array dan tambahkan nomor urut
-  return Object.values(merged).map((item, index) => ({
-    no: index + 1,
-    ...item,
-  }));
-}

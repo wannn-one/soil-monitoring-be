@@ -1,0 +1,24 @@
+1. install node js & npm
+apabila sudah terinstall, cek dengan :
+node -v    --> versi node js
+npm -v     --> versi npm
+
+2. clone repo backend
+
+3. hapus file package-log.json
+
+4. install dependencies yg dibutuhkan 
+npm install
+
+5. run server
+npm run dev
+
+apabila di jalankan pada local, maka base urlnya adalah :
+http://localhost:{PORT}
+
+6. baca dokumentasi postman untuk uji coba backend
+
+https://documenter.getpostman.com/view/39313343/2sB2cUBiK2
+
+catatan :
+seluruh konfigurasi, silahkan di sesuaikan pada file .env (mqtt broker, hingga bucket untul influx db)
